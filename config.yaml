@@ -1,0 +1,10 @@
+backend_addresses:
+  - "http://localhost:8081"
+  - "http://localhost:8082"
+  - "http://localhost:8083"
+
+algorithm_type: "round-robin"
+
+#backet
+token_refill_interval: 30s
+bucket_capacity: 10 
