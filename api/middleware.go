@@ -1,6 +1,7 @@
 package api
 
 import (
+	"loadBalance/internal/utils/rateLimited"
 	"net"
 	"net/http"
 	"sync"
@@ -14,7 +15,15 @@ func RateLimitedMiddleware(rate time.Duration, capacity int) func(http.Handler) 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip, _, err := net.SplitHostPort(r.RemoteAddr)
 			if err != nil {
-				http.Error(w, "Unable to parse IP", http.StatusInternalServerError)
+				responseWithJSON(w, http.StatusInternalServerError, "Unable to parse IP")
+				return
+			}
+
+			limiterIface, _ := limiters.LoadOrStore(ip, rateLimited.NewTokenBucket(rate, capacity))
+			limiter := limiterIface.(*rateLimited.TokenBucket)
+
+			if !limiter.Allow() {
+				responseWithJSON(w, http.StatusTooManyRequests, "Rate limit exceeded")
 				return
 			}
 

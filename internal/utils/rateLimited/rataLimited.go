@@ -1,18 +1,36 @@
 package rateLimited
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type TokenBucket struct {
 	tokens chan struct{}
 	ticker *time.Ticker
-	stop   chan struct{}
+	cancel context.CancelFunc
+}
+
+func (t *TokenBucket) Allow() bool {
+	select {
+	case <-t.tokens:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *TokenBucket) Stop() {
+	t.cancel()
 }
 
 func NewTokenBucket(rate time.Duration, capacity int) *TokenBucket {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	tkn := &TokenBucket{
 		tokens: make(chan struct{}, capacity),
 		ticker: time.NewTicker(rate),
-		stop:   make(chan struct{}),
+		cancel: cancel,
 	}
 
 	for i := 0; i < capacity; i++ {
@@ -27,7 +45,7 @@ func NewTokenBucket(rate time.Duration, capacity int) *TokenBucket {
 				case tkn.tokens <- struct{}{}:
 				default:
 				}
-			case <-tkn.stop:
+			case <-ctx.Done():
 				tkn.ticker.Stop()
 				return
 			}

@@ -6,5 +6,6 @@ backend_addresses:
 algorithm_type: "round-robin"
 
 #backet
-token_refill_interval: 30s
-bucket_capacity: 10 
+bucket:
+  rate: 30s
+  capacity: 2

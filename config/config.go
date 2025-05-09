@@ -4,11 +4,18 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"log"
 	"os"
+	"time"
 )
 
 type Config struct {
 	BackendAddresses []string `yaml:"backend_addresses"`
 	AlgorithmType    string   `yaml:"algorithm_type"`
+	Bucket           Bucket   `yaml:"bucket"`
+}
+
+type Bucket struct {
+	Rate     time.Duration `yaml:"rate"`
+	Capacity int           `yaml:"capacity"`
 }
 
 func Init(configPath string) *Config {
