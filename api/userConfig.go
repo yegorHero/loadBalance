@@ -5,19 +5,19 @@ import (
 )
 
 type UserConfig struct {
-	repo userConfigRepo
+	storage userConfigStorage
 }
 
-type userConfigRepo interface {
+type userConfigStorage interface {
 	Create()
 	Read()
 	Update()
 	Delete()
 }
 
-func NewUserConfig(repo userConfigRepo) *UserConfig {
+func NewUserConfig(storage userConfigStorage) *UserConfig {
 	return &UserConfig{
-		repo: repo,
+		storage: storage,
 	}
 }
 

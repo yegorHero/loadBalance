@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type AlgorithmType interface {
+type ServerSelector interface {
 	GetNextServer() (*url.URL, error)
 }
 
@@ -17,7 +17,7 @@ type Server struct {
 	Alive atomic.Bool
 }
 
-func Init(algorithmType string, addrServers []string) AlgorithmType {
+func Init(algorithmType string, addrServers []string) ServerSelector {
 	servers := make([]*Server, 0, len(addrServers))
 	for _, addr := range addrServers {
 		u, err := url.Parse(addr)
@@ -47,6 +47,7 @@ func Init(algorithmType string, addrServers []string) AlgorithmType {
 func (s *Server) CheckHealth(timeout time.Duration) {
 	client := http.Client{Timeout: timeout}
 	resp, err := client.Get(s.URL.String())
+
 	if err != nil || resp.StatusCode != http.StatusOK {
 		s.Alive.Store(false)
 		if err != nil {

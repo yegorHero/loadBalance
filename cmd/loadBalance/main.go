@@ -4,10 +4,10 @@ import (
 	"loadBalance/api"
 	"loadBalance/config"
 	"loadBalance/internal/algorithm"
+	"loadBalance/internal/utils/server"
 	"log"
-	"net"
-	"net/http"
-	"net/http/httputil"
+	"log/slog"
+	"os"
 )
 
 const configPath = "./config.yaml"
@@ -17,41 +17,37 @@ func main() {
 
 	alg := algorithm.Init(cfg.AlgorithmType, cfg.BackendAddresses)
 
-	//mux := http.NewServeMux()
-	//mux.Handle("/api/status")
-
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			log.Printf("Malformed address: %s", r.RemoteAddr)
-		}
-
-		log.Printf("Client IP: %s %s %s", ip, r.Method, r.URL.Path)
-
-		target, err := alg.GetNextServer()
-		if err != nil {
-			log.Printf("alg.GetNextServer: %v", err)
-			http.Error(w, "No backend server are alive", http.StatusServiceUnavailable)
-			return
-		}
-
-		proxy := &httputil.ReverseProxy{
-			Director: func(req *http.Request) {
-				req.URL.Scheme = target.Scheme
-				req.URL.Host = target.Host
-			},
-			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-				http.Error(w, "Backend unavailable: "+err.Error(), http.StatusServiceUnavailable)
-			},
-		}
-		proxy.ServeHTTP(w, r)
-	})
-
 	mdl := api.RateLimitedMiddleware(cfg.Bucket.Rate, cfg.Bucket.Capacity)
 
+	proxy := api.NewProxyHandler(alg)
+
+	httpServer := server.New(":8080", mdl(proxy))
+
 	log.Println("Started server on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", mdl(handler)))
+	httpServer.Start()
+}
+
+func setupLogger(env string) *slog.Logger {
+	var log *slog.Logger
+
+	switch env {
+	case envLocal:
+		log = setupPrettySlog()
+	case envDev:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		)
+	case envProd:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
+	default:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
+	}
+
+	return log
 }
 
 // TODO выбрать логер, установить уровень логирования. логирование входящих запросов, событий и ошибок

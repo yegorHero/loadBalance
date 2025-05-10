@@ -1,7 +1,7 @@
 package api
 
 import (
-	"loadBalance/internal/utils/rateLimited"
+	"loadBalance/internal/rateLimited"
 	"net"
 	"net/http"
 	"sync"
