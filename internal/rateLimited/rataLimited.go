@@ -8,7 +8,6 @@ import (
 type TokenBucket struct {
 	tokens chan struct{}
 	ticker *time.Ticker
-	cancel context.CancelFunc
 }
 
 func (t *TokenBucket) Allow() bool {
@@ -20,17 +19,10 @@ func (t *TokenBucket) Allow() bool {
 	}
 }
 
-func (t *TokenBucket) Stop() {
-	t.cancel()
-}
-
-func NewTokenBucket(rate time.Duration, capacity int) *TokenBucket {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func NewTokenBucket(ctx context.Context, rate time.Duration, capacity int) *TokenBucket {
 	tkn := &TokenBucket{
 		tokens: make(chan struct{}, capacity),
 		ticker: time.NewTicker(rate),
-		cancel: cancel,
 	}
 
 	for i := 0; i < capacity; i++ {

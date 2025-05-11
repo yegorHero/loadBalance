@@ -1,6 +1,7 @@
 package algorithm
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/url"
@@ -17,7 +18,7 @@ type Server struct {
 	Alive atomic.Bool
 }
 
-func Init(algorithmType string, addrServers []string) ServerSelector {
+func Init(ctx context.Context, algorithmType string, addrServers []string) ServerSelector {
 	servers := make([]*Server, 0, len(addrServers))
 	for _, addr := range addrServers {
 		u, err := url.Parse(addr)
@@ -30,7 +31,7 @@ func Init(algorithmType string, addrServers []string) ServerSelector {
 		})
 	}
 
-	startHealthCheck(servers, 5*time.Second)
+	startHealthCheck(ctx, servers, 5*time.Second)
 
 	switch algorithmType {
 	case "round-robin":
@@ -62,12 +63,18 @@ func (s *Server) CheckHealth(timeout time.Duration) {
 	s.Alive.Store(true)
 }
 
-func startHealthCheck(servers []*Server, interval time.Duration) {
+func startHealthCheck(ctx context.Context, servers []*Server, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
+		defer ticker.Stop()
 		for range ticker.C {
-			for _, s := range servers {
-				s.CheckHealth(2 * time.Second)
+			select {
+			case <-ticker.C:
+				for _, s := range servers {
+					s.CheckHealth(2 * time.Second)
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()

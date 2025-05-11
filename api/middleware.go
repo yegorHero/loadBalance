@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"loadBalance/internal/rateLimited"
 	"net"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"time"
 )
 
-func RateLimitedMiddleware(rate time.Duration, capacity int) func(http.Handler) http.Handler {
+func RateLimitedMiddleware(ctx context.Context, rate time.Duration, capacity int) func(http.Handler) http.Handler {
 	limiters := sync.Map{}
 
 	return func(next http.Handler) http.Handler {
@@ -19,7 +20,7 @@ func RateLimitedMiddleware(rate time.Duration, capacity int) func(http.Handler) 
 				return
 			}
 
-			limiterIface, _ := limiters.LoadOrStore(ip, rateLimited.NewTokenBucket(rate, capacity))
+			limiterIface, _ := limiters.LoadOrStore(ip, rateLimited.NewTokenBucket(ctx, rate, capacity))
 			limiter := limiterIface.(*rateLimited.TokenBucket)
 
 			if !limiter.Allow() {

@@ -1,3 +1,10 @@
+app:
+  name: "loadBalance"
+  version: "0.0.1"
+  address:
+    host:
+    port: "8080"
+
 backend_addresses:
   - "http://localhost:8081"
   - "http://localhost:8082"
@@ -9,3 +16,6 @@ algorithm_type: "round-robin"
 bucket:
   rate: 30s
   capacity: 2
+
+logger:
+  level: "info"  # info, debug

@@ -1,54 +1,77 @@
 package main
 
 import (
+	"context"
+	log "github.com/sirupsen/logrus"
 	"loadBalance/api"
 	"loadBalance/config"
 	"loadBalance/internal/algorithm"
 	"loadBalance/internal/utils/server"
-	"log"
-	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
-const configPath = "./config.yaml"
+const (
+	configPath = "./config.yaml"
+)
 
 func main() {
 	cfg := config.Init(configPath)
 
-	alg := algorithm.Init(cfg.AlgorithmType, cfg.BackendAddresses)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	mdl := api.RateLimitedMiddleware(cfg.Bucket.Rate, cfg.Bucket.Capacity)
+	setupLogger(cfg.Logger.Level)
 
+	log.Infof("Initialising algorithm: %s...", cfg.AlgorithmType)
+	alg := algorithm.Init(ctx, cfg.AlgorithmType, cfg.BackendAddresses)
+
+	mdl := api.RateLimitedMiddleware(ctx, cfg.Bucket.Rate, cfg.Bucket.Capacity)
+
+	log.Info("Initialising proxy handler...")
 	proxy := api.NewProxyHandler(alg)
 
-	httpServer := server.New(":8080", mdl(proxy))
+	log.Info("Started server on port:", cfg.App.Address.Port)
+	httpServer := server.New(":"+cfg.App.Address.Port, mdl(proxy))
 
-	log.Println("Started server on port 8080")
-	httpServer.Start()
-}
-
-func setupLogger(env string) *slog.Logger {
-	var log *slog.Logger
-
-	switch env {
-	case envLocal:
-		log = setupPrettySlog()
-	case envDev:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-		)
-	case envProd:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
-	default:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
-		)
+	select {
+	case err := <-httpServer.Notify():
+		if err != nil {
+			log.Errorf("server exited with error: %v", err)
+		} else {
+			log.Info("Server exited normally")
+		}
+	case <-ctx.Done():
+		log.Info("Shutdown signal received")
 	}
 
-	return log
+	log.Info("Shutting down HTTP server...")
+
+	if err := httpServer.Shutdown(); err != nil {
+		log.Errorf("Error during shutdown: %v", err)
+	} else {
+		log.Info("Shutdown complete")
+	}
 }
+
+func setupLogger(level string) {
+	logLevel, err := log.ParseLevel(level)
+	if err != nil {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(logLevel)
+	}
+
+	log.SetFormatter(&log.JSONFormatter{
+		TimestampFormat: "2006-01-02 15:04:05",
+	})
+
+	log.SetOutput(os.Stdout)
+}
+
+// TODO у меня есть возможность останавливать горутины(токенБакеты, проверка состояния серверов), для корректного закрытия нужно передать управление серверу, чтобы при остановке он закрывал соединения к бд, серверам и работающие на фоне горутины
+// TODO проблема состоит в том, что токены генерирует каждый пользователь и нужно будет дать сигнал каждому, так еще и держать это хранилище при себе
 
 // TODO выбрать логер, установить уровень логирования. логирование входящих запросов, событий и ошибок
 // TODO tokenBucket: поддерживать настройку лимитов каждого клиента, настройки можно сохранят в бд
